@@ -1,0 +1,237 @@
+1.只优化代码排版    查看是否有结果差异
+from model.avatar_modelrev import AvatarModel
+from model.networkrev import POP_no_unet
+from model.modulesless import UnetNoCond5DS, GeomConvLayers, GeomConvBottleneckLayers, ShapeDecoder
+python trainrev.py -s /media/hhx/Lenovo/code/GaussianAvatar/gs_data/m4c_processed -m output/m4c_processed --train_stage 1 --dimension 3 --train_geo 0
+
+观察到新姿势结果是透明的，用同样的renderpose文件读取原版net就能正常
+修改为from model.avatar_model import AvatarModel
+变为正常
+
+测试修改trainstage函数为正常版本
+未见异常
+所以是trainstage的问题
+
+改了很小的部分
+改回去再测试一次
+又没问题了...
+
+2.优化排版并优化opacity和R
+from model.avatar_modelrev import AvatarModel
+self.net_pred_all=True
+from model.networkrev import POP_no_unet
+from model.modules import UnetNoCond5DS, GeomConvLayers, GeomConvBottleneckLayers, ShapeDecoder
+
+scales = self.sigmoid(xN8)  # Scales range [0, 1]
+rotations = self.tan(xR8)  # Rotations range [-1, 1] (for quaternion)
+opacitys = self.sigmoid(xO8)  # Opacity range [0, 1]
+
+又出现透明
+测试渲染新视角时使用固定opacity
+opacity=self.fix_opacity
+依然透明
+测试同时固定opacity和R
+依然透明
+测试固定color
+colors_precomp=colors*255  结果为全白
+colors_precomp=colors*0
+
+再运行一次
+透明
+再返回1运行一次
+透明
+再次替换trainstage函数
+正常
+稍微修改trainstage1就还是透明
+if iteration < 1000:
+rotations=self.fix_rotation,
+scales=scales,
+opacity=self.fix_opacity,
+
+。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。无语
+修改后正常
+但效果不好，出现扭曲
+3.修改激活函数
+self.scaling_activation = torch.exp
+self.opacity_activation = torch.sigmoid
+self.rotation_activation = torch.nn.functional.normalize
+
+scales = self.scaling_activation(xN8)
+rotations = self.rotation_activation(xR8)
+pred_scales = pred_scales.permute([0,2,1])*1e-2
+训练效果好，test效果不好
+
+4.在3的前提下改用2dgs
+
+
+5.分阶段优化GS属性实验
+d gs和4dgs都没优化opacity与shs
+待修改：network ShapeDecoder trainstage setstage freeze or unfreeze
+
+
+
+
+   
+class MonoDataset_train(Dataset):
+    @torch.no_grad()
+    def __init__(self, dataset_parms,data_folder=None,
+                 device = torch.device('cuda:0')):
+        super(MonoDataset_train, self).__init__()
+
+        self.dataset_parms = dataset_parms
+        if data_folder is None:
+            self.data_folder = join(dataset_parms.source_path, 'train')
+        else:
+            self.data_folder = data_folder  # 允许自定义路径
+        # self.data_folder = join(dataset_parms.source_path, 'train')
+        self.device = device
+        self.gender = self.dataset_parms.smpl_gender
+
+        self.zfar = 100.0
+        self.znear = 0.01
+        self.trans = np.array([0.0, 0.0, 0.0]),
+        self.scale = 1.0
+
+        self.no_mask = bool(self.dataset_parms.no_mask)
+
+        if dataset_parms.train_stage == 1:
+            print('loading smpl data ', join(self.data_folder, 'smpl_parms.pth'))
+            self.smpl_data = torch.load(join(self.data_folder, 'smpl_parms.pth'))
+        else:
+            print('loading smpl data ', join(self.data_folder, 'smpl_parms_pred.pth'))
+            self.smpl_data = torch.load(join(self.data_folder, 'smpl_parms_pred.pth'))
+        # print('loading smpl data ', join(self.data_folder, 'smpl_parms.pth'))
+        # self.smpl_data = torch.load(join(self.data_folder, 'smpl_parms.pth'))
+
+        self.data_length = len(os.listdir(join(self.data_folder, 'images')))
+        
+        self.name_list = []
+        for index, img in enumerate(sorted(os.listdir(join(self.data_folder, 'images')))):
+            base_name = img.split('.')[0]
+            self.name_list.append((index, base_name))
+        
+        self.image_fix = os.listdir(join(self.data_folder, 'images'))[0].split('.')[-1]
+        
+        if not dataset_parms.no_mask:
+            self.mask_fix = os.listdir(join(self.data_folder, 'masks'))[0].split('.')[-1]
+
+        print("total pose length", self.data_length )
+
+
+        if dataset_parms.smpl_type == 'smplx':
+
+            self.pose_data = self.smpl_data['body_pose'][:self.data_length, :66]
+
+            self.transl_data = self.smpl_data['trans'][:self.data_length,:]
+            self.rest_pose_data = self.smpl_data['body_pose'][:self.data_length, 66:]
+            if not torch.is_tensor(self.smpl_data['body_pose']):
+                self.pose_data = torch.from_numpy(self.pose_data)
+            if not torch.is_tensor(self.smpl_data['trans']):
+                self.transl_data = torch.from_numpy(self.transl_data)
+        else:
+            self.pose_data = self.smpl_data['body_pose'][:self.data_length]
+            self.transl_data = self.smpl_data['trans'][:self.data_length,:]
+            # self.rest_pose_data = self.smpl_data['body_pose'][:self.data_length, 66:]
+            if not torch.is_tensor(self.smpl_data['body_pose']):
+                self.pose_data = torch.from_numpy(self.pose_data)
+            if not torch.is_tensor(self.smpl_data['trans']):
+                self.transl_data = torch.from_numpy(self.transl_data)
+
+        if dataset_parms.cam_static:
+            cam_path = join(self.data_folder, 'cam_parms.npz')
+            cam_npy = np.load(cam_path)
+            extr_npy = cam_npy['extrinsic']
+            intr_npy = cam_npy['intrinsic']
+            self.R = np.array(extr_npy[:3, :3], np.float32).reshape(3, 3).transpose(1, 0)
+            self.T = np.array([extr_npy[:3, 3]], np.float32)
+            self.intrinsic = np.array(intr_npy, np.float32).reshape(3, 3)
+        
+    def __len__(self):
+        return self.data_length
+
+    def __getitem__(self, index, ignore_list=None):
+        return self.getitem(index, ignore_list)
+
+    @torch.no_grad()
+    def getitem(self, index, ignore_list):
+        pose_idx, name_idx = self.name_list[index]
+
+        image_path = join(self.data_folder, 'images' ,name_idx + '.' + self.image_fix)
+        
+        cam_path = join(self.data_folder, 'cam_parms', name_idx + '.npz')
+
+        if not self.dataset_parms.no_mask:
+            mask_path = join(self.data_folder, 'masks', name_idx + '.' + self.mask_fix)
+
+        if self.dataset_parms.train_stage == 2:
+
+            inp_posmap_path = self.data_folder + '/inp_map/' +'inp_posemap_%s_%s.npz'% (str(self.dataset_parms.inp_posmap_size), str(pose_idx).zfill(8))
+            inp_posmap = np.load(inp_posmap_path)['posmap' + str(self.dataset_parms.inp_posmap_size)]
+
+        if not self.dataset_parms.cam_static:
+            cam_npy = np.load(cam_path)
+            extr_npy = cam_npy['extrinsic']
+            intr_npy = cam_npy['intrinsic']
+            R = np.array(extr_npy[:3, :3], np.float32).reshape(3, 3).transpose(1, 0)
+            T = np.array(extr_npy[:3, 3], np.float32)
+            intrinsic = np.array(intr_npy, np.float32).reshape(3, 3)
+        
+        else:
+            R = self.R
+            T = self.T
+            intrinsic = self.intrinsic
+
+        focal_length_x = intrinsic[0, 0]
+        focal_length_y = intrinsic[1, 1]
+
+        image = Image.open(image_path)
+        width, height = image.size
+
+        FovY = focal2fov(focal_length_y, height)
+        FovX = focal2fov(focal_length_x, width)
+
+        if not self.dataset_parms.no_mask:
+            mask = np.array(Image.open(mask_path))
+
+            if len(mask.shape) <3:
+                mask = mask[...,None]
+
+            mask[mask < 128] = 0
+            mask[mask >= 128] = 1
+            color_img = image * mask + (1 - mask) * 255
+            image = Image.fromarray(np.array(color_img, dtype=np.byte), "RGB")
+
+        
+        data_item = dict()
+        if self.dataset_parms.train_stage == 2:
+            data_item['inp_pos_map'] = inp_posmap.transpose(2,0,1)
+
+
+        resized_image = torch.from_numpy(np.array(image)) / 255.0
+        if len(resized_image.shape) == 3:
+            resized_image =  resized_image.permute(2, 0, 1)
+        else:
+            resized_image =  resized_image.unsqueeze(dim=-1).permute(2, 0, 1)
+
+        original_image = resized_image.clamp(0.0, 1.0)
+
+        data_item['original_image'] = original_image
+        data_item['FovX'] = FovX
+        data_item['FovY'] = FovY
+        data_item['width'] = width
+        data_item['height'] = height
+        data_item['pose_idx'] = pose_idx
+        if self.dataset_parms.smpl_type == 'smplx':
+            rest_pose = self.rest_pose_data[pose_idx]
+            data_item['rest_pose'] = rest_pose
+  
+        world_view_transform = torch.tensor(getWorld2View2(R, T, self.trans, self.scale)).transpose(0, 1)
+        projection_matrix = getProjectionMatrix(znear=self.znear, zfar=self.zfar, fovX=FovX, fovY=FovY, K=intrinsic, h=height, w=width).transpose(0,1)
+        full_proj_transform = (world_view_transform.unsqueeze(0).bmm(projection_matrix.unsqueeze(0))).squeeze(0)
+        camera_center = world_view_transform.inverse()[3, :3]
+        data_item['world_view_transform'] = world_view_transform
+        data_item['projection_matrix'] = projection_matrix
+        data_item['full_proj_transform'] = full_proj_transform
+        data_item['camera_center'] = camera_center
+        
+        return data_item

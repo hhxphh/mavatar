@@ -1,0 +1,7 @@
+# ninja log v5
+1	5804	1736664603450000000	/media/hhx/Lenovo/code/GaussianAvatarori/submodules/simple-knn/build/temp.linux-x86_64-cpython-310/simple_knn.o	27da6bbdb15ea96f
+0	8365	1736664606020000000	/media/hhx/Lenovo/code/GaussianAvatarori/submodules/simple-knn/build/temp.linux-x86_64-cpython-310/ext.o	b19c8cfbb28e3d20
+1	27372	1736664625020000000	/media/hhx/Lenovo/code/GaussianAvatarori/submodules/simple-knn/build/temp.linux-x86_64-cpython-310/spatial.o	48faa7202f3f3aa1
+3	6015	1736678448980000000	/media/hhx/Lenovo/code/GaussianAvatarori/submodules/simple-knn/build/temp.linux-x86_64-cpython-310/simple_knn.o	5e5eb69d33ba659e
+3	8758	1736678451720000000	/media/hhx/Lenovo/code/GaussianAvatarori/submodules/simple-knn/build/temp.linux-x86_64-cpython-310/ext.o	bada35c17845fe00
+3	27458	1736678470420000000	/media/hhx/Lenovo/code/GaussianAvatarori/submodules/simple-knn/build/temp.linux-x86_64-cpython-310/spatial.o	5d08f00e17363a52

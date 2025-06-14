@@ -1,0 +1,4 @@
+# ninja log v5
+0	6078	1736586068930000000	/media/hhx/Lenovo/code/2d-gaussian-splatting/submodules/simple-knn/build/temp.linux-x86_64-cpython-38/simple_knn.o	15b67a674ffdc2fa
+0	8864	1736586071720000000	/media/hhx/Lenovo/code/2d-gaussian-splatting/submodules/simple-knn/build/temp.linux-x86_64-cpython-38/ext.o	40ae0302895aca10
+0	29210	1736586092060000000	/media/hhx/Lenovo/code/2d-gaussian-splatting/submodules/simple-knn/build/temp.linux-x86_64-cpython-38/spatial.o	c7cfd7eb824d18e4
